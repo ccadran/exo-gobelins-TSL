@@ -1,0 +1,32 @@
+import { Color, type Node } from "three/webgpu";
+import { abs, cos, dot, fract, length, max, min, sin, uniform, vec2 } from "three/tsl";
+
+// Petits outils TSL réutilisables entre les pages.
+
+export type Vec2 = Node<"vec2">;
+export type Vec3 = Node<"vec3">;
+export type Float = Node<"float"> | number;
+
+// Uniform de couleur utilisable comme un vec3 dans les calculs (les types de three le
+// typent "color", incompatible avec vec3, alors qu'au runtime c'est bien un vec3).
+// `.value` est une THREE.Color : bindable directement dans Tweakpane.
+export const colorUniform = (hex: string) =>
+  uniform(new Color(hex)) as unknown as Vec3 & { value: Color };
+
+// Pseudo-aléatoire [0, 1] à partir d'un vec2 (typiquement l'id d'une cellule de grille).
+export const hash21 = (p: Vec2) => fract(sin(dot(p, vec2(127.1, 311.7))).mul(43758.5453));
+
+export const hash22 = (p: Vec2) =>
+  fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))).mul(43758.5453));
+
+// Distance signée à un rectangle arrondi centré en 0 (négative à l'intérieur).
+export const sdRoundedBox = (p: Vec2, halfSize: Vec2, radius: Float) => {
+  const q = abs(p).sub(halfSize).add(radius);
+  return length(max(q, 0)).add(min(max(q.x, q.y), 0)).sub(radius);
+};
+
+export const rotate2d = (p: Vec2, angle: Float) => {
+  const c = cos(angle);
+  const s = sin(angle);
+  return vec2(p.x.mul(c).sub(p.y.mul(s)), p.x.mul(s).add(p.y.mul(c)));
+};

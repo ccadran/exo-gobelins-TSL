@@ -1,0 +1,41 @@
+[data-page="test-a"] {
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 30% 20%, #1e3a8a, #020617 70%);
+  color: #e2e8f0;
+  font-family: system-ui, sans-serif;
+}
+
+[data-page="test-a"] .content {
+  text-align: center;
+}
+
+[data-page="test-a"] .tag {
+  margin: 0;
+  font: 12px/1.4 monospace;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #93c5fd;
+}
+
+[data-page="test-a"] h1 {
+  margin: 8px 0;
+  font-size: 160px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+[data-page="test-a"] .counter {
+  margin-top: 24px;
+  padding: 12px 24px;
+  font: inherit;
+  color: #020617;
+  background: #93c5fd;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+[data-page="test-a"] .counter:hover {
+  background: #fff;
+}

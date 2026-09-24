@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>html-in-canvas-project</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+
+      canvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      /* Chaque page est un enfant drawable plein écran du canvas.
+         En absolu pour que deux pages (pendant une transition) se superposent. */
+      canvas > .page {
+        position: absolute;
+        top: 0;
+        left: 0;
+        box-sizing: border-box;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      /* UI hors canvas : un bouton HTML classique, au-dessus du rendu. */
+      .ui-next {
+        position: fixed;
+        right: 32px;
+        bottom: 32px;
+        padding: 14px 28px;
+        font: 600 16px/1 system-ui, sans-serif;
+        color: #fff;
+        background: #111;
+        border: 2px solid #fff;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+
+      .ui-next:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- content="drawable" : les enfants sont mis en page mais c'est nous qui les dessinons. -->
+    <canvas content="drawable"></canvas>
+    <button type="button" class="ui-next">Suivant</button>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
