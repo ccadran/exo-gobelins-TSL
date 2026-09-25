@@ -6,6 +6,9 @@ import {
   type WebGPURenderer,
 } from "three/webgpu";
 import {
+  float,
+  Fn,
+  If,
   min,
   mix,
   oneMinus,
@@ -41,7 +44,6 @@ import {
   wetGlass,
 } from "./rain";
 import {
-  applySwitchFire,
   applySwitchFrost,
   createSwitchParams,
 } from "./switches";
@@ -65,7 +67,7 @@ const VIEW_MODES = {
 // Expérience 01 : "Tu préfères l'eau ou le feu ?"
 // Feu : des trous irréguliers s'ouvrent et se referment, bords incandescents.
 // Eau : pluie horizontale, ripples aux impacts, page qui se mouille (gouttes + coulures).
-// Chaque switch actif donne aussi un look aux deux switches (incandescent / verre embué).
+// Quand l'eau est active, les deux switches prennent un look de verre froid embué.
 export class FireWaterPage extends Page {
   readonly id = "fire-water";
   protected readonly template = template;
@@ -111,16 +113,16 @@ export class FireWaterPage extends Page {
     this.waterInput = this.root.querySelector<HTMLInputElement>(
       'input[name="water"]',
     )!;
-    this.regions = [...this.root.querySelectorAll<HTMLElement>(".track")].map(
-      (track) => new ElementRegion(track),
+    this.regions = [...this.root.querySelectorAll<HTMLElement>(".choice")].map(
+      (choice) => new ElementRegion(choice),
     );
 
     this.buildMaterial();
     this.buildDebug();
 
     this.root.addEventListener("pointerdown", (event) => {
-      // Pas de clic sur les switches : ils servent à activer / désactiver.
-      if ((event.target as HTMLElement).closest(".switch")) return;
+      // Pas d'effet au clic sur les switches ni sur le bouton Suivant.
+      if ((event.target as HTMLElement).closest(".choice, .next-button")) return;
       const x = event.clientX / window.innerWidth;
       const y = event.clientY / window.innerHeight;
       // Chaque effet ne réagit au clic que s'il est actif.
@@ -139,6 +141,7 @@ export class FireWaterPage extends Page {
     const aspect = screenSize.x.div(screenSize.y);
     const pixel = uv.mul(this.viewport); // pixels CSS, même repère que getBoundingClientRect
     const aspectUV = vec2(uv.x.mul(aspect), uv.y);
+    const toUV = vec2(aspect, 1);
     const html = (at: Vec2) =>
       texture(this.html.texture, at).rgb as unknown as Vec3;
 
@@ -146,9 +149,7 @@ export class FireWaterPage extends Page {
     const [a, b] = this.regions;
     const switchD = min(a.sdf(pixel), b.sdf(pixel));
 
-    // Champ de brûlure (trous + brûlures au clic). Calculé en premier car
-    // il déforme aussi la page. `burnAt(offset)` sert à en calculer la pente.
-    const toUV = vec2(aspect, 1);
+    // Champ de brûlure décalé de `offset` : sert à calculer sa pente (déformation).
     const burnAt = (offset: Vec2) =>
       burnField(
         aspectUV.add(offset),
@@ -156,72 +157,111 @@ export class FireWaterPage extends Page {
         fire,
         burnsHeat(aspectUV.add(offset), aspect, time, this.burns, fire),
       );
-    const heat = burnsHeat(aspectUV, aspect, time, this.burns, fire);
-    const burnD = burnField(aspectUV, time, fire, heat);
-    const insideSwitch = oneMinus(smoothstep(-1, 1, switchD));
 
-    // 1. Déformations : gouttes sur la page, ripples des impacts, papier qui brûle
-    // (sauf sur les switches).
-    const glass = wetGlass(uv, aspect, time, rain);
-    const rip = ripples(uv, aspect, time, this.impacts, rain);
-    const fireOffset = burnDistortion(aspectUV, burnD, burnAt, time, fire)
-      .div(toUV)
-      .mul(oneMinus(insideSwitch));
-    const distortedUV = uv.sub(glass.offset).add(rip.offset).add(fireOffset);
+    // Performance : chaque effet n'est calculé que s'il est actif. Ce sont des `If` sur des
+    // uniforms, donc de vrais branchements (tous les pixels prennent le même chemin) : un
+    // effet éteint ne coûte rien. Avec `select`, les deux côtés seraient calculés.
+    const fireActive = fire.amount.greaterThan(0.001);
+    const waterActive = rain.amount
+      .greaterThan(0.001)
+      .or(rain.wetness.greaterThan(0.001));
+    const frostActive = switches.frostLook.greaterThan(0.001);
 
-    let color = html(distortedUV);
-    color = mix(color, color.mul(rain.wetTint), rain.wetness.mul(0.35));
-    color = color.add(glass.mask.mul(0.06)).add(rip.light.mul(0.25));
+    const shade = Fn(() => {
+      const heat = float(0).toVar();
+      const burnD = float(1).toVar(); // > 0 : papier intact
+      const fireOffset = vec2(0, 0).toVar();
+      const waterOffset = vec2(0, 0).toVar();
+      const wetMask = float(0).toVar();
+      const rippleLight = float(0).toVar();
 
-    // 2. Switches : verre embué (avec flou) puis incandescence.
-    const r = switches.frostBlur;
-    const blurred = html(distortedUV)
-      .add(html(distortedUV.add(vec2(r, 0))))
-      .add(html(distortedUV.sub(vec2(r, 0))))
-      .add(html(distortedUV.add(vec2(0, r))))
-      .add(html(distortedUV.sub(vec2(0, r))))
-      .add(html(distortedUV.add(vec2(r, r).mul(0.7))))
-      .add(html(distortedUV.sub(vec2(r, r).mul(0.7))))
-      .add(html(distortedUV.add(vec2(r, r.negate()).mul(0.7))))
-      .add(html(distortedUV.sub(vec2(r, r.negate()).mul(0.7))))
-      .div(9);
-    color = applySwitchFrost(color, blurred, switchD, pixel, time, switches);
-    color = applySwitchFire(color, switchD, pixel, time, switches);
+      // 1. Champs et déformations.
+      If(fireActive, () => {
+        heat.assign(burnsHeat(aspectUV, aspect, time, this.burns, fire));
+        burnD.assign(burnField(aspectUV, time, fire, heat));
+        // La pente coûte deux champs de plus : seulement aux abords des trous, là où la
+        // déformation est visible.
+        If(burnD.lessThan(fire.warpWidth.mul(4)), () => {
+          fireOffset.assign(
+            burnDistortion(aspectUV, burnD, burnAt, time, fire).div(toUV),
+          );
+        });
+      });
 
-    // 3. Feu : trous. Les switches eux-mêmes ne brûlent pas : on y remet la couleur
-    // d'avant le feu, sans marge autour.
-    color = mix(
-      applyFire(color, burnD, aspectUV, time, fire),
-      color,
-      insideSwitch,
-    );
+      If(waterActive, () => {
+        const glass = wetGlass(uv, aspect, time, rain);
+        const rip = ripples(uv, aspect, time, this.impacts, rain);
+        waterOffset.assign(rip.offset.sub(glass.offset));
+        wetMask.assign(glass.mask);
+        rippleLight.assign(rip.light);
+      });
 
-    // 4. Pluie devant la page.
-    color = color.add(rainStreaks(uv, aspect, time, rain));
+      const distortedUV = uv.add(waterOffset).add(fireOffset);
+      const color = html(distortedUV).toVar();
 
-    // Vues de debug.
-    const burnView = vec3(burnD.mul(4).add(0.5));
-    const waterView = vec3(
-      glass.offset.add(rip.offset).add(fireOffset).mul(40).add(0.5),
-      glass.mask,
-    );
-    const switchView = vec3(insideSwitch);
-    const heatView = vec3(heat, heat.mul(0.3), 0);
-    const output = select(
-      this.viewMode.equal(1),
-      burnView,
-      select(
-        this.viewMode.equal(2),
-        waterView,
+      // 2. Page mouillée.
+      If(waterActive, () => {
+        color.assign(
+          mix(color, color.mul(rain.wetTint), rain.wetness.mul(0.35))
+            .add(wetMask.mul(0.06))
+            .add(rippleLight.mul(0.25)),
+        );
+      });
+
+      // 3. Switches : verre embué (avec flou).
+      If(frostActive, () => {
+        const r = switches.frostBlur;
+        const blurred = html(distortedUV)
+          .add(html(distortedUV.add(vec2(r, 0))))
+          .add(html(distortedUV.sub(vec2(r, 0))))
+          .add(html(distortedUV.add(vec2(0, r))))
+          .add(html(distortedUV.sub(vec2(0, r))))
+          .add(html(distortedUV.add(vec2(r, r).mul(0.7))))
+          .add(html(distortedUV.sub(vec2(r, r).mul(0.7))))
+          .add(html(distortedUV.add(vec2(r, r.negate()).mul(0.7))))
+          .add(html(distortedUV.sub(vec2(r, r.negate()).mul(0.7))))
+          .div(9);
+        color.assign(
+          applySwitchFrost(color, blurred, switchD, pixel, time, switches),
+        );
+      });
+
+      // 4. Feu : trous, partout (les switches peuvent être consumés aussi).
+      If(fireActive, () => {
+        color.assign(applyFire(color, burnD, aspectUV, time, fire));
+      });
+
+      // 5. Pluie devant la page.
+      If(rain.amount.greaterThan(0.001), () => {
+        color.addAssign(rainStreaks(uv, aspect, time, rain));
+      });
+
+      // Vues de debug.
+      const burnView = vec3(burnD.mul(4).add(0.5));
+      const waterView = vec3(
+        waterOffset.add(fireOffset).mul(40).add(0.5),
+        wetMask,
+      );
+      const switchView = vec3(oneMinus(smoothstep(-1, 1, switchD)));
+      const heatView = vec3(heat, heat.mul(0.3), 0);
+      const output = select(
+        this.viewMode.equal(1),
+        burnView,
         select(
-          this.viewMode.equal(3),
-          switchView,
-          select(this.viewMode.equal(4), heatView, color),
+          this.viewMode.equal(2),
+          waterView,
+          select(
+            this.viewMode.equal(3),
+            switchView,
+            select(this.viewMode.equal(4), heatView, color),
+          ),
         ),
-      ),
-    );
+      );
 
-    this.material.colorNode = vec4(output, 1);
+      return vec4(output, 1);
+    });
+
+    this.material.colorNode = shade();
   }
 
   private spawnRipple(x: number, y: number, strength = 1) {
@@ -258,11 +298,6 @@ export class FireWaterPage extends Page {
       this.rain.amount.value,
       waterOn,
       delta / s.rainRampTime,
-    );
-    this.switches.fireLook.value = approach(
-      this.switches.fireLook.value,
-      fireOn,
-      delta / s.lookRampTime,
     );
     this.switches.frostLook.value = approach(
       this.switches.frostLook.value,
@@ -540,26 +575,6 @@ export class FireWaterPage extends Page {
       min: 0.05,
       max: 3,
     });
-    switchFolder.addBinding(switches.glowPx, "value", {
-      label: "halo (px)",
-      min: 1,
-      max: 60,
-    });
-    switchFolder.addBinding(switches.glowIntensity, "value", {
-      label: "halo intensité",
-      min: 0,
-      max: 5,
-    });
-    switchFolder.addBinding(switches.charPx, "value", {
-      label: "cramé (px)",
-      min: 0,
-      max: 20,
-    });
-    switchFolder.addBinding(switches.heat, "value", {
-      label: "chaleur",
-      min: 0,
-      max: 1,
-    });
     switchFolder.addBinding(switches.frostBlur, "value", {
       label: "flou",
       min: 0,
@@ -574,10 +589,6 @@ export class FireWaterPage extends Page {
       label: "reflet bord",
       min: 0,
       max: 2,
-    });
-    switchFolder.addBinding(switches.glowColor, "value", {
-      label: "glow",
-      ...color,
     });
     switchFolder.addBinding(switches.frostColor, "value", {
       label: "givre",

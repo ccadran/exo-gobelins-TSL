@@ -37,7 +37,9 @@ export class HtmlTexture {
   }
 
   // Taille en "canvas grid coordinates" (pixels du canvas, donc DPR inclus).
-  private resize() {
+  // Appelé automatiquement quand l'élément change de taille, et par l'App quand la
+  // résolution (pixel ratio) change.
+  resize() {
     const scale = this.renderer.getPixelRatio();
     const rect = this.element.getBoundingClientRect();
     const width = Math.max(1, Math.round(rect.width * scale));

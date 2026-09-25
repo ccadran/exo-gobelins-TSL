@@ -7,6 +7,7 @@ const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2
 
 // Transition de test : un cercle part de `origin` et s'élargit en révélant la page suivante.
 export class CircleTransition implements Transition {
+  readonly steps = 1;
   duration = 1.2;
 
   private progress = uniform(0);
@@ -58,6 +59,12 @@ export class CircleTransition implements Transition {
     this.elapsed = 0;
     this.progress.value = 0;
     this.running = true;
+  }
+
+  hit() {}
+
+  cancel() {
+    this.running = false;
   }
 
   update(delta: number) {

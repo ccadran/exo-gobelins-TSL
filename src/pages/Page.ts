@@ -15,6 +15,9 @@ export abstract class Page {
   protected abstract readonly style: string;
 
   root!: HTMLElement;
+  // Bouton "Suivant", ajouté à toutes les pages : il fait partie du DOM de la page, donc il
+  // est dessiné (et cassé) avec elle. C'est le PageManager qui écoute ses clics.
+  nextButton!: HTMLButtonElement;
   readonly output = new RenderTarget(1, 1, { type: HalfFloatType });
   protected html!: HtmlTexture;
   protected debug!: FolderApi;
@@ -31,6 +34,10 @@ export abstract class Page {
     this.root.dataset.page = this.id;
     this.root.className = "page";
     this.root.innerHTML = this.template;
+    this.nextButton = document.createElement("button");
+    this.nextButton.type = "button";
+    this.nextButton.className = "next-button";
+    this.root.append(this.nextButton);
     ctx.canvas.append(this.root);
 
     this.styleElement = document.createElement("style");
@@ -61,7 +68,12 @@ export abstract class Page {
   // Dessine la page dans la cible courante (son `output`).
   protected abstract draw(renderer: WebGPURenderer): void;
 
-  // La page sort : son DOM ne doit plus capter les clics ni le focus.
+  // DOM actif ou non (clics, focus). Une page entrante reste inactive pendant la transition :
+  // sa section est superposée à celle de la page courante et intercepterait ses clics.
+  enter() {
+    this.root.inert = false;
+  }
+
   leave() {
     this.root.inert = true;
   }

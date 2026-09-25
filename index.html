@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="./index.css" />
     <title>html-in-canvas-project</title>
     <style>
       html,
@@ -31,30 +32,18 @@
         height: 100vh;
       }
 
-      /* UI hors canvas : un bouton HTML classique, au-dessus du rendu. */
-      .ui-next {
-        position: fixed;
+      /* Bouton "Suivant" : présent dans le DOM de chaque page (il se casse avec elle).
+         Bouton natif, juste positionné. */
+      canvas > .page > .next-button {
+        position: absolute;
         right: 32px;
         bottom: 32px;
-        padding: 14px 28px;
-        font: 600 16px/1 system-ui, sans-serif;
-        color: #fff;
-        background: #111;
-        border: 2px solid #fff;
-        border-radius: 999px;
-        cursor: pointer;
-      }
-
-      .ui-next:disabled {
-        opacity: 0.4;
-        cursor: default;
       }
     </style>
   </head>
   <body>
     <!-- content="drawable" : les enfants sont mis en page mais c'est nous qui les dessinons. -->
     <canvas content="drawable"></canvas>
-    <button type="button" class="ui-next">Suivant</button>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

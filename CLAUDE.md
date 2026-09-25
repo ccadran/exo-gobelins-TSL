@@ -32,7 +32,8 @@ uniquement) + Tweakpane 4 pour le debug.
 
 ```
 src/
-  main.ts               → new App(canvas, nextButton, [liste ordonnée des pages])
+  main.ts               → new App(canvas, { nom: () => new Page() }) — ordre = parcours,
+                          noms = boutons du dossier debug "pages" (navigation directe)
   core/
     App.ts              → renderer, resize, boucle pilotée par `paint`, AppContext, bouton Suivant
     PageManager.ts      → page courante / entrante, lance la transition, affiche le résultat
@@ -48,8 +49,9 @@ src/
     <page>/style.css      (importé en ?inline, scopé sous [data-page="<id>"])
   tsl/utils.ts          → helpers TSL partagés (hash, SDF, rotation, colorUniform, types Vec2/Vec3)
   transitions/
-    Transition.ts       → interface : start({ from, to, origin }), update, render, done
-    circle/             → transition de test (cercle qui s'élargit depuis le bouton)
+    Transition.ts       → interface : steps, start({ from, to, origin }), hit, update, render, done
+    circle/             → transition simple (cercle qui s'élargit depuis le bouton), 1 clic
+    crack/              → vitre brisée en plusieurs clics (Voronoi + éclats 3D + verre TSL)
 ```
 
 ### Principes à respecter
@@ -75,9 +77,13 @@ src/
   matériaux). Un élément `drawable` orphelin laissé dans le DOM pollue l'accessibilité.
 - **Chaque page rend dans son `output`** (RenderTarget HalfFloat à la taille du drawing buffer),
   jamais directement à l'écran. Le `PageManager` affiche `output`, ou la transition.
+- **Bouton Suivant** : créé par `Page.mount()` dans le DOM de chaque page (`page.nextButton`,
+  stylé dans `index.html`), donc dessiné et cassé avec la page. Le `PageManager` écoute ses
+  clics et change son texte (Suivant → Encore → Allez).
 - **Transitions** : elles ne reçoivent que deux textures et une origine (screenUV), jamais les
-  pages. Le `PageManager` attend que la page entrante soit `ready` (DOM copié au moins une
-  fois) avant d'appeler `start()`, puis dispose la page sortante quand `done` repasse à vrai.
+  pages. 1er clic : le `PageManager` monte la page suivante, appelle `start()` puis `hit()` ;
+  clics suivants : `hit()`. Au `steps`-ième clic la page sortante devient `inert`, et elle est
+  disposée quand `done` passe à vrai.
 - **Piège TSL** : `textureNode.sample(uv)` clone le nœud et fige sa texture. Si on doit changer
   la texture après coup (`node.value = …`), créer le nœud avec `texture(tex, uv)` et utiliser
   ce nœud-là directement dans le graphe.
@@ -87,6 +93,13 @@ src/
   `Node<"vec2">` / `Node<"float">` (types `Vec2`, `Vec3` de `tsl/utils`). Les uniforms de couleur
   passent par `colorUniform("#hex")` (sinon typés "color", incompatibles avec vec3). Pour
   `uniformArray`, passer le type `as const` (ex. `"vec4" as const`).
+- **Performance des shaders** : les pages sont calculées en plein écran, en Retina, à chaque
+  frame. Un effet qui peut être éteint doit être dans un `If(uniform…)` à l'intérieur d'un
+  `Fn` (vrai branchement : éteint = gratuit), pas dans un `select`/`mix` qui calcule les deux
+  côtés. Éviter de réévaluer plusieurs fois un bruit fractal (ex. pentes par différences
+  finies) : limiter ce calcul aux zones où il est visible. Un addon coûteux (ex. `BloomNode`)
+  tourne même à force 0 : prévoir un matériau sans lui. L'App limite les fps (60 par défaut)
+  et expose la résolution dans le debug (dossier "Performance").
 - **Debug** : chaque page range ses réglages dans `this.debug` (dossiers par effet, vues de
   debug via un uniform `viewMode` + `select`). Les uniforms sont bindés directement
   (`addBinding(u, "value", …)`).

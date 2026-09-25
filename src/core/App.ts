@@ -1,6 +1,6 @@
-import { Vector2, WebGPURenderer } from "three/webgpu";
+import { WebGPURenderer } from "three/webgpu";
 import { Pane } from "tweakpane";
-import { CircleTransition } from "../transitions/circle";
+import { CrackTransition } from "../transitions/crack";
 import { HtmlTexture } from "./HtmlTexture";
 import { PageManager, type PageFactory } from "./PageManager";
 import { Pointer } from "./Pointer";
@@ -19,8 +19,7 @@ export type AppContext = {
 // on rend la frame, puis requestPaint() redemande un `paint` pour la frame suivante.
 export class App {
   private canvas: HTMLCanvasElement;
-  private pageFactories: PageFactory[];
-  private nextButton: HTMLButtonElement;
+  private pageFactories: Record<string, PageFactory>;
   private renderer: WebGPURenderer;
   private pane = new Pane({ title: "Debug" });
   private pointer = new Pointer();
@@ -28,11 +27,26 @@ export class App {
   private pages: PageManager | null = null;
   private lastTime = performance.now();
   private elapsed = 0;
-  private stats = { status: "init…", paints: 0, copies: 0, lastError: "" };
+  private stats = {
+    status: "init…",
+    fps: 0,
+    paints: 0,
+    copies: 0,
+    lastError: "",
+  };
+  // Performance : limite d'images/s (un écran 120 Hz dessinerait sinon 2× plus) et
+  // résolution de rendu (pixel ratio ; 2 = Retina net, plus bas = moins de pixels à calculer).
+  private settings = {
+    maxFps: 120,
+    pixelRatio: Math.min(window.devicePixelRatio, 2),
+  };
 
-  constructor(canvas: HTMLCanvasElement, nextButton: HTMLButtonElement, pageFactories: PageFactory[]) {
+  // pageFactories : { nom: () => new Page() }, dans l'ordre du parcours.
+  constructor(
+    canvas: HTMLCanvasElement,
+    pageFactories: Record<string, PageFactory>,
+  ) {
     this.canvas = canvas;
-    this.nextButton = nextButton;
     this.pageFactories = pageFactories;
     this.renderer = new WebGPURenderer({ canvas, antialias: false });
     this.init();
@@ -42,19 +56,26 @@ export class App {
     const support = detectSupport();
     this.addMonitors(support);
 
-    if (!support.webgpu || !support.requestPaint || !support.drawElementImageToTexture) {
+    if (
+      !support.webgpu ||
+      !support.requestPaint ||
+      !support.drawElementImageToTexture
+    ) {
       this.stats.status = "API manquante (voir Support)";
       console.error("[html-in-canvas] API indisponible", support);
       return;
     }
 
     await this.renderer.init();
-    if (!(this.renderer.backend as unknown as { isWebGPUBackend?: boolean }).isWebGPUBackend) {
+    if (
+      !(this.renderer.backend as unknown as { isWebGPUBackend?: boolean })
+        .isWebGPUBackend
+    ) {
       this.stats.status = "three est retombé sur WebGL";
       return;
     }
 
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(this.settings.pixelRatio);
     this.resize();
     window.addEventListener("resize", () => this.resize());
 
@@ -71,20 +92,27 @@ export class App {
       },
     };
 
-    const transition = new CircleTransition(this.pane.addFolder({ title: "transition" }));
-    this.pages = new PageManager(ctx, this.pageFactories, transition);
+    const transition = new CrackTransition(
+      this.pane.addFolder({ title: "transition" }),
+      this.pointer,
+    );
+    this.pages = new PageManager(
+      ctx,
+      Object.values(this.pageFactories),
+      transition,
+    );
 
-    // La transition part du centre du bouton.
-    this.nextButton.addEventListener("click", () => {
-      const rect = this.nextButton.getBoundingClientRect();
-      const origin = new Vector2(
-        (rect.left + rect.width / 2) / window.innerWidth,
-        (rect.top + rect.height / 2) / window.innerHeight,
-      );
-      this.pages?.next(origin);
+    // Debug : aller directement à une page, sans passer par la transition.
+    const navigation = this.pane.addFolder({ title: "pages" });
+    Object.keys(this.pageFactories).forEach((name, index) => {
+      navigation
+        .addButton({ title: name })
+        .on("click", () => this.pages?.goTo(index));
     });
 
-    this.canvas.addEventListener("paint", (event) => this.frame(event as CanvasPaintEvent));
+    this.canvas.addEventListener("paint", (event) =>
+      this.frame(event as CanvasPaintEvent),
+    );
     this.canvas.requestPaint!();
     this.stats.status = "ok";
   }
@@ -95,12 +123,10 @@ export class App {
   }
 
   private frame(event: CanvasPaintEvent) {
-    const now = performance.now();
-    const delta = (now - this.lastTime) / 1000;
-    this.lastTime = now;
-    this.elapsed += delta;
     this.stats.paints++;
 
+    // Toujours copier le DOM qui a changé, même si on saute le rendu de cette frame :
+    // sinon ce changement serait perdu (il n'est signalé qu'une fois).
     const changed = event.changedElements ?? [];
     this.stats.copies = 0;
     this.stats.lastError = "";
@@ -110,25 +136,71 @@ export class App {
       this.stats.lastError ||= html.lastError;
     }
 
+    // Limite d'images/s : on saute le rendu si la frame précédente est trop récente
+    // (petite marge pour les variations de timing du navigateur).
+    const now = performance.now();
+    if (now - this.lastTime < 1000 / this.settings.maxFps - 2) {
+      this.canvas.requestPaint!();
+      return;
+    }
+    const delta = (now - this.lastTime) / 1000;
+    this.lastTime = now;
+    this.elapsed += delta;
+    this.stats.fps += (1 / Math.max(delta, 1e-3) - this.stats.fps) * 0.1;
+
     if (this.pages) {
       this.pages.update(delta, this.elapsed);
       this.pages.render(this.renderer);
-      this.nextButton.disabled = this.pages.transitioning;
     }
 
     this.canvas.requestPaint!();
   }
 
   private addMonitors(support: Support) {
-    const supportFolder = this.pane.addFolder({ title: "Support", expanded: false });
+    const supportFolder = this.pane.addFolder({
+      title: "Support",
+      expanded: false,
+    });
     for (const key of Object.keys(support) as (keyof Support)[]) {
       supportFolder.addBinding(support, key, { readonly: true });
     }
 
     const statsFolder = this.pane.addFolder({ title: "Stats" });
     statsFolder.addBinding(this.stats, "status", { readonly: true });
-    statsFolder.addBinding(this.stats, "paints", { readonly: true, format: (v) => v.toFixed(0) });
-    statsFolder.addBinding(this.stats, "copies", { readonly: true, format: (v) => v.toFixed(0) });
-    statsFolder.addBinding(this.stats, "lastError", { readonly: true, multiline: true, rows: 3 });
+    statsFolder.addBinding(this.stats, "fps", {
+      readonly: true,
+      format: (v) => v.toFixed(0),
+    });
+    statsFolder.addBinding(this.stats, "paints", {
+      readonly: true,
+      format: (v) => v.toFixed(0),
+    });
+    statsFolder.addBinding(this.stats, "copies", {
+      readonly: true,
+      format: (v) => v.toFixed(0),
+    });
+    statsFolder.addBinding(this.stats, "lastError", {
+      readonly: true,
+      multiline: true,
+      rows: 3,
+    });
+
+    const performanceFolder = this.pane.addFolder({ title: "Performance" });
+    performanceFolder.addBinding(this.settings, "maxFps", {
+      label: "fps max",
+      options: { "30": 30, "60": 60, "120": 120 },
+    });
+    performanceFolder
+      .addBinding(this.settings, "pixelRatio", {
+        label: "résolution",
+        min: 0.5,
+        max: 2,
+        step: 0.25,
+      })
+      .on("change", () => {
+        this.renderer.setPixelRatio(this.settings.pixelRatio);
+        this.resize();
+        for (const html of this.htmlTextures) html.resize();
+      });
   }
 }
