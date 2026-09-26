@@ -50,7 +50,6 @@ import {
 import template from "./template.html?raw";
 import style from "./style.css?inline";
 
-// Rapproche `value` de `target` d'au plus `step` (transitions douces des effets).
 const approach = (value: number, target: number, step: number) =>
   value < target
     ? Math.min(value + step, target)
@@ -64,10 +63,6 @@ const VIEW_MODES = {
   "brûlures clic": 4,
 };
 
-// Expérience 01 : "Tu préfères l'eau ou le feu ?"
-// Feu : des trous irréguliers s'ouvrent et se referment, bords incandescents.
-// Eau : pluie horizontale, ripples aux impacts, page qui se mouille (gouttes + coulures).
-// Quand l'eau est active, les deux switches prennent un look de verre froid embué.
 export class FireWaterPage extends Page {
   readonly id = "fire-water";
   protected readonly template = template;
@@ -94,14 +89,13 @@ export class FireWaterPage extends Page {
   private waterInput!: HTMLInputElement;
   private regions: ElementRegion[] = [];
 
-  // Réglages côté JS (exposés dans le debug).
   private settings = {
-    fireRampTime: 1.75, // secondes pour que les trous apparaissent / disparaissent
-    rainRampTime: 1, // secondes pour que la pluie démarre / s'arrête
-    lookRampTime: 0.6, // secondes pour le look des switches
-    wetDuration: 12, // secondes pour être complètement mouillée
-    dryDuration: 8, // secondes pour sécher
-    autoWetness: true, // décocher pour régler la wetness à la main
+    fireRampTime: 1.75,
+    rainRampTime: 1,
+    lookRampTime: 0.6,
+    wetDuration: 12,
+    dryDuration: 8,
+    autoWetness: true,
     ripplesPerSecond: 6,
     rippleOnClick: true,
     burnOnClick: true,
@@ -121,11 +115,9 @@ export class FireWaterPage extends Page {
     this.buildDebug();
 
     this.root.addEventListener("pointerdown", (event) => {
-      // Pas d'effet au clic sur les switches ni sur le bouton Suivant.
       if ((event.target as HTMLElement).closest(".choice, .next-button")) return;
       const x = event.clientX / window.innerWidth;
       const y = event.clientY / window.innerHeight;
-      // Chaque effet ne réagit au clic que s'il est actif.
       if (this.settings.rippleOnClick && this.waterInput.checked) {
         this.spawnRipple(x, y);
       }
@@ -139,17 +131,15 @@ export class FireWaterPage extends Page {
     const { fire, rain, switches, time } = this;
     const uv = screenUV as unknown as Vec2;
     const aspect = screenSize.x.div(screenSize.y);
-    const pixel = uv.mul(this.viewport); // pixels CSS, même repère que getBoundingClientRect
+    const pixel = uv.mul(this.viewport);
     const aspectUV = vec2(uv.x.mul(aspect), uv.y);
     const toUV = vec2(aspect, 1);
     const html = (at: Vec2) =>
       texture(this.html.texture, at).rgb as unknown as Vec3;
 
-    // Distance au switch le plus proche.
     const [a, b] = this.regions;
     const switchD = min(a.sdf(pixel), b.sdf(pixel));
 
-    // Champ de brûlure décalé de `offset` : sert à calculer sa pente (déformation).
     const burnAt = (offset: Vec2) =>
       burnField(
         aspectUV.add(offset),
@@ -158,9 +148,6 @@ export class FireWaterPage extends Page {
         burnsHeat(aspectUV.add(offset), aspect, time, this.burns, fire),
       );
 
-    // Performance : chaque effet n'est calculé que s'il est actif. Ce sont des `If` sur des
-    // uniforms, donc de vrais branchements (tous les pixels prennent le même chemin) : un
-    // effet éteint ne coûte rien. Avec `select`, les deux côtés seraient calculés.
     const fireActive = fire.amount.greaterThan(0.001);
     const waterActive = rain.amount
       .greaterThan(0.001)
@@ -169,18 +156,15 @@ export class FireWaterPage extends Page {
 
     const shade = Fn(() => {
       const heat = float(0).toVar();
-      const burnD = float(1).toVar(); // > 0 : papier intact
+      const burnD = float(1).toVar();
       const fireOffset = vec2(0, 0).toVar();
       const waterOffset = vec2(0, 0).toVar();
       const wetMask = float(0).toVar();
       const rippleLight = float(0).toVar();
 
-      // 1. Champs et déformations.
       If(fireActive, () => {
         heat.assign(burnsHeat(aspectUV, aspect, time, this.burns, fire));
         burnD.assign(burnField(aspectUV, time, fire, heat));
-        // La pente coûte deux champs de plus : seulement aux abords des trous, là où la
-        // déformation est visible.
         If(burnD.lessThan(fire.warpWidth.mul(4)), () => {
           fireOffset.assign(
             burnDistortion(aspectUV, burnD, burnAt, time, fire).div(toUV),
@@ -199,7 +183,6 @@ export class FireWaterPage extends Page {
       const distortedUV = uv.add(waterOffset).add(fireOffset);
       const color = html(distortedUV).toVar();
 
-      // 2. Page mouillée.
       If(waterActive, () => {
         color.assign(
           mix(color, color.mul(rain.wetTint), rain.wetness.mul(0.35))
@@ -208,7 +191,6 @@ export class FireWaterPage extends Page {
         );
       });
 
-      // 3. Switches : verre embué (avec flou).
       If(frostActive, () => {
         const r = switches.frostBlur;
         const blurred = html(distortedUV)
@@ -226,17 +208,14 @@ export class FireWaterPage extends Page {
         );
       });
 
-      // 4. Feu : trous, partout (les switches peuvent être consumés aussi).
       If(fireActive, () => {
         color.assign(applyFire(color, burnD, aspectUV, time, fire));
       });
 
-      // 5. Pluie devant la page.
       If(rain.amount.greaterThan(0.001), () => {
         color.addAssign(rainStreaks(uv, aspect, time, rain));
       });
 
-      // Vues de debug.
       const burnView = vec3(burnD.mul(4).add(0.5));
       const waterView = vec3(
         waterOffset.add(fireOffset).mul(40).add(0.5),
@@ -313,7 +292,6 @@ export class FireWaterPage extends Page {
       );
     }
 
-    // Toutes les gouttes ne font pas de ripple : quelques impacts par seconde, au hasard.
     this.rippleBudget += delta * s.ripplesPerSecond * this.rain.amount.value;
     while (this.rippleBudget >= 1) {
       this.rippleBudget -= 1;

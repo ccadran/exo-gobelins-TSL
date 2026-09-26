@@ -1,10 +1,5 @@
-// Découpe d'un rectangle en cellules de Voronoi (adapté de motiontx/html-in-canvas, exemple
-// "login"). Chaque cellule = un éclat de verre. Repère monde : y vers le haut, rectangle
-// centré en 0, de demi-taille (halfWidth, halfHeight).
-
 export type P2 = [number, number];
 
-// Garde la partie du polygone du côté de (nx, ny) de la droite passant par (mx, my).
 function clipHalf(poly: P2[], mx: number, my: number, nx: number, ny: number): P2[] {
   const out: P2[] = [];
   for (let i = 0; i < poly.length; i++) {
@@ -21,8 +16,6 @@ function clipHalf(poly: P2[], mx: number, my: number, nx: number, ny: number): P
   return out;
 }
 
-// Cellule du germe i : le rectangle, coupé par la médiatrice avec chaque autre germe.
-// Le polygone reste dans le sens trigonométrique (celui du rectangle de départ).
 export function voronoiCell(seeds: P2[], i: number, halfWidth: number, halfHeight: number): P2[] {
   const [sx, sy] = seeds[i];
   let poly: P2[] = [
@@ -39,7 +32,6 @@ export function voronoiCell(seeds: P2[], i: number, halfWidth: number, halfHeigh
   return poly;
 }
 
-// Centre de gravité (pondéré par l'aire) d'un polygone.
 export function centroid(poly: P2[]): P2 {
   let area = 0;
   let x = 0;
@@ -57,13 +49,12 @@ export function centroid(poly: P2[]): P2 {
 }
 
 export type SeedOptions = {
-  impact: P2; // point d'impact (le bouton)
-  radial: number; // germes concentrés autour de l'impact (petits éclats)
-  uniform: number; // germes répartis sur toute la page (grands éclats)
-  radialSpread: number; // rayon de la zone concentrée
+  impact: P2;
+  radial: number;
+  uniform: number;
+  radialSpread: number;
 };
 
-// Germes : denses près de l'impact (random² => concentrés au centre), épars ailleurs.
 export function createSeeds(halfWidth: number, halfHeight: number, options: SeedOptions): P2[] {
   const seeds: P2[] = [];
   const inside = (x: number, y: number) => Math.abs(x) < halfWidth && Math.abs(y) < halfHeight;

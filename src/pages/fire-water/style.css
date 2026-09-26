@@ -1,5 +1,3 @@
-/* Volontairement "HTML brut" : styles par défaut du navigateur, pour que l'effet surprenne.
-   Seulement le centrage, et un fond : sans lui, la section serait transparente dans la texture. */
 [data-page="fire-water"] {
   display: grid;
   place-items: center;

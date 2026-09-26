@@ -24,25 +24,23 @@ import {
 
 export function createFireParams() {
   return {
-    amount: uniform(0), // 0..1, piloté par le switch (monte/descend en douceur)
-    coverage: uniform(0.25), // part de la page trouée quand amount = 1
-    scale: uniform(2.5), // taille des trous (plus grand = trous plus petits)
-    speed: uniform(0.12), // vitesse d'ouverture / fermeture
-    detail: uniform(0.3), // irrégularité des bords
-    edgeWidth: uniform(0.04), // largeur du liseré incandescent
-    charWidth: uniform(0.3), // largeur de la zone roussie autour des trous
-    glowWidth: uniform(0.05), // portée du halo
+    amount: uniform(0),
+    coverage: uniform(0.25),
+    scale: uniform(2.5),
+    speed: uniform(0.12),
+    detail: uniform(0.3),
+    edgeWidth: uniform(0.04),
+    charWidth: uniform(0.3),
+    glowWidth: uniform(0.05),
     glowIntensity: uniform(4.5),
-    // Brûlures au clic : le trou part de zéro et grandit jusqu'à burnRadius.
-    ignite: uniform(0.5), // à quel point une brûlure ouvre la page
-    burnRadius: uniform(0.15), // rayon final (en hauteur d'écran)
-    burnGrow: uniform(1.5), // secondes pour atteindre le rayon final
-    burnHold: uniform(4), // secondes à taille maximale
-    burnFade: uniform(3), // secondes pour se refermer
-    // Déformation de la page autour des trous
-    warp: uniform(0.015), // le papier est tiré vers le trou (négatif = repoussé)
-    warpWidth: uniform(0.12), // distance au bord sur laquelle la page se déforme
-    shimmer: uniform(0.004), // tremblement de chaleur
+    ignite: uniform(0.5),
+    burnRadius: uniform(0.15),
+    burnGrow: uniform(1.5),
+    burnHold: uniform(4),
+    burnFade: uniform(3),
+    warp: uniform(0.015),
+    warpWidth: uniform(0.12),
+    shimmer: uniform(0.004),
     shimmerScale: uniform(18),
     shimmerSpeed: uniform(3),
     glowColor: colorUniform("#ff5a00"),
@@ -54,11 +52,6 @@ export function createFireParams() {
 
 export type FireParams = ReturnType<typeof createFireParams>;
 
-// Champ de brûlure : > 0 = papier intact, < 0 = trou. La valeur sert de pseudo-distance au bord.
-// Un bruit fractal 3D (x, y, temps) : en avançant dans le temps, des zones passent
-// sous/au-dessus du seuil, donc des trous s'ouvrent et se referment. Le bruit fin rend
-// les bords irréguliers. `heat` (0..1, brûlures au clic) fait monter le champ : le feu prend
-// là où on a cliqué. Actif seulement quand le feu est allumé (× amount).
 export function burnField(
   p: Vec2,
   time: Node<"float">,
@@ -80,14 +73,12 @@ export function burnField(
   const field = large
     .add(fine.mul(params.detail))
     .add(params.ignite.mul(heat).mul(params.amount));
-  // amount = 0 : seuil hors d'atteinte, aucun trou.
   const threshold = mix(1.5, oneMinus(params.coverage), params.amount);
   return threshold.sub(field);
 }
 
 export const MAX_BURNS = 8;
 
-// Brûlures : (x, y) en screenUV, z = instant du clic, w = force. z très négatif = libre.
 export function createBurns() {
   return uniformArray(
     Array.from({ length: MAX_BURNS }, () => new Vector4(0, 0, -1000, 0)),
@@ -97,9 +88,6 @@ export function createBurns() {
 
 export type Burns = ReturnType<typeof createBurns>;
 
-// Chaleur (0..1) des brûlures au point p (repère aspect). Chaque brûlure grandit de 0 à
-// burnRadius, reste, puis se referme. Le contour est irrégulier car cette chaleur s'ajoute
-// au bruit du champ de brûlure.
 export function burnsHeat(
   p: Vec2,
   aspect: Float,
@@ -109,7 +97,6 @@ export function burnsHeat(
 ) {
   let heat: Node<"float"> = float(0);
 
-  // Boucle déroulée côté JS : MAX_BURNS copies dans le shader.
   for (let i = 0; i < MAX_BURNS; i++) {
     const burn = burns.element(i);
     const age = time.sub(burn.z);
@@ -130,10 +117,6 @@ export function burnsHeat(
   return heat;
 }
 
-// Déplacement d'UV (repère aspect) à appliquer AVANT de lire le HTML : près des bords qui
-// brûlent, le papier est tiré vers le trou et ondule sous la chaleur.
-// `field(offset)` renvoie le champ de brûlure décalé de `offset` : on en tire la pente
-// (différences finies), qui pointe du trou vers le papier.
 export function burnDistortion(
   p: Vec2,
   d: Node<"float">,
@@ -151,7 +134,6 @@ export function burnDistortion(
     params.amount,
   );
 
-  // Lire plus loin dans le papier = le contenu se tasse vers le bord du trou.
   const pull = direction.mul(params.warp);
   const q = vec3(p.mul(params.shimmerScale), time.mul(params.shimmerSpeed));
   const shimmer = vec2(
@@ -177,7 +159,6 @@ export function applyFire(
     .mul(0.3)
     .add(0.85);
 
-  // Papier : roussi près des trous, liseré incandescent (jaune au bord, orange après), halo.
   const charred = mix(color, params.charColor, char.mul(char));
   const emission = mix(params.glowColor, params.emberColor, edge.mul(edge))
     .mul(edge)
@@ -189,7 +170,6 @@ export function applyFire(
     .mul(flicker);
   const paper = charred.add(emission).add(halo);
 
-  // Trou : sombre, avec les braises du bord qui éclairent un peu l'intérieur.
   const inside = params.holeColor.add(
     params.glowColor
       .mul(exp(d.div(params.glowWidth)))

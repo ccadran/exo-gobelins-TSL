@@ -1,6 +1,3 @@
-// Détection des morceaux de l'API HTML-in-Canvas réellement présents dans le navigateur.
-// Utile pendant le spike : l'implémentation Chromium évolue et peut différer de l'explainer.
-
 export type Support = {
   webgpu: boolean;
   requestPaint: boolean;

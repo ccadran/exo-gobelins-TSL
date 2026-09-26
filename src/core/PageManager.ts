@@ -6,16 +6,8 @@ import type { AppContext } from "./App";
 
 export type PageFactory = () => Page;
 
-// Texte du bouton de la page à chaque clic (le dernier est réutilisé s'il en manque).
 const NEXT_LABELS = ["Suivant", "Encore", "Allez"];
 
-// Enchaîne les pages dans l'ordre (suite linéaire, on reboucle à la fin pour l'instant).
-// Chaque page rend dans son `output` ; le manager affiche soit la page courante,
-// soit la transition entre la page sortante et la page entrante.
-//
-// Le bouton "Suivant" est dans le DOM de chaque page. 1er clic : on monte la page suivante
-// et on démarre la transition ; chaque clic la fait avancer ; au `transition.steps`-ième,
-// elle part pour de bon, et on remplace la page quand elle est terminée.
 export class PageManager {
   private ctx: AppContext;
   private factories: PageFactory[];
@@ -42,7 +34,6 @@ export class PageManager {
   private onNext(page: Page) {
     if (page !== this.current || this.hits >= this.transition.steps) return;
 
-    // Origine de l'effet : le centre du bouton, en screenUV.
     const rect = page.nextButton.getBoundingClientRect();
     const origin = new Vector2(
       (rect.left + rect.width / 2) / window.innerWidth,
@@ -67,7 +58,6 @@ export class PageManager {
     else page.nextButton.textContent = NEXT_LABELS[Math.min(this.hits, NEXT_LABELS.length - 1)];
   }
 
-  // Navigation directe (debug) : abandonne l'éventuelle transition et monte la page `index`.
   goTo(index: number) {
     if (this.hits > 0) this.transition.cancel();
     this.incoming?.dispose();

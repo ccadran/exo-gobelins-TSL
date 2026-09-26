@@ -5,8 +5,6 @@ import { Page } from "../Page";
 import template from "./template.html?raw";
 import style from "./style.css?inline";
 
-// Spike : valide la chaîne DOM -> texture WebGPU -> matériau TSL -> écran,
-// avec une ondulation autour du pointeur pour vérifier que le HTML est bien déformable.
 export class SpikePage extends Page {
   readonly id = "spike";
   protected readonly template = template;
@@ -21,8 +19,6 @@ export class SpikePage extends Page {
     const speed = uniform(4);
     const falloff = uniform(6);
 
-    // screenUV : origine en haut à gauche, comme le DOM. La page étant plein écran,
-    // screenUV est directement l'UV de la texture HTML.
     const aspect = vec2(screenSize.x.div(screenSize.y), 1);
     const toPointer = screenUV.sub(ctx.pointer.uv).mul(aspect);
     const distance = toPointer.length();
@@ -38,7 +34,6 @@ export class SpikePage extends Page {
     this.debug.addBinding(speed, "value", { label: "speed", min: 0, max: 20 });
     this.debug.addBinding(falloff, "value", { label: "falloff", min: 0, max: 20 });
 
-    // Test de hit-testing : le clic doit atteindre le vrai bouton du DOM.
     const button = this.root.querySelector<HTMLButtonElement>(".button")!;
     const count = this.root.querySelector<HTMLElement>(".count")!;
     let clicks = 0;

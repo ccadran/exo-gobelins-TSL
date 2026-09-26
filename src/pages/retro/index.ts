@@ -22,10 +22,6 @@ const smoothstep = (edge0: number, edge1: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 
-// Expérience "années 80" : un slider de "No" à "Yes". Plus on va vers "Yes", plus la page
-// ressemble à un vieux moniteur CRT. Deux passes :
-// 1. l'image du tube (courbure, entrelacement, aberration) -> crtTarget ;
-// 2. crtTarget + bloom (phosphore), puis scanlines, masque RGB, bruit, vignettage.
 export class RetroPage extends Page {
   readonly id = "retro";
   protected readonly template = template;
@@ -36,8 +32,6 @@ export class RetroPage extends Page {
   private crtTarget = new RenderTarget(1, 1, { type: HalfFloatType });
   private imageMaterial = new MeshBasicNodeMaterial();
   private screenMaterial = new MeshBasicNodeMaterial();
-  // Même passe sans bloom : le BloomNode fait ses passes de flou à chaque frame, même à
-  // force 0. On utilise donc ce matériau tant que le bloom n'est pas visible.
   private screenMaterialNoBloom = new MeshBasicNodeMaterial();
   private imageQuad = new QuadMesh(this.imageMaterial);
   private screenQuad = new QuadMesh(this.screenMaterial);
@@ -45,10 +39,10 @@ export class RetroPage extends Page {
   private slider!: HTMLInputElement;
 
   private state = {
-    value: 0, // valeur du slider, 0 (No) à 100 (Yes)
-    intensity: 0, // 0 = No, 1 = Yes (suit le slider en douceur)
-    smoothing: 6, // réactivité de l'intensité au slider
-    manual: false, // pour régler l'intensité à la main dans le debug
+    value: 0,
+    intensity: 0,
+    smoothing: 6,
+    manual: false,
   };
 
   protected setup(_ctx: AppContext) {
@@ -87,7 +81,6 @@ export class RetroPage extends Page {
       s.intensity += (target - s.intensity) * (1 - Math.exp(-delta * s.smoothing));
     }
 
-    // Chaque effet suit sa propre plage sur l'intensité globale.
     for (const effect of Object.values(this.effects)) {
       effect.value.value = smoothstep(effect.start, effect.end, s.intensity) * effect.max;
     }
@@ -96,7 +89,6 @@ export class RetroPage extends Page {
   }
 
   protected draw(renderer: WebGPURenderer) {
-    // Passe 1 dans crtTarget, puis passe 2 dans la cible de la page (son output).
     const target = renderer.getRenderTarget();
     renderer.setRenderTarget(this.crtTarget);
     this.imageQuad.render(renderer);
@@ -115,7 +107,6 @@ export class RetroPage extends Page {
     debug.addBinding(state, "intensity", { label: "intensité", min: 0, max: 1 });
     debug.addBinding(state, "smoothing", { label: "réactivité", min: 0.5, max: 30 });
 
-    // Plage d'apparition de chaque effet sur l'intensité globale.
     const ranges = debug.addFolder({ title: "plages des effets", expanded: false });
     const labels: Record<keyof typeof effects, string> = {
       scanlines: "scanlines",

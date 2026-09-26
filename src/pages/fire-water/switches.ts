@@ -16,12 +16,10 @@ import { colorUniform, hash21, type Vec2, type Vec3 } from "../../tsl/utils";
 
 type Float = Node<"float">;
 
-// Look "verre froid embué" appliqué aux deux switches quand l'eau est active.
-// `d` = distance signée au bord du switch le plus proche, en pixels CSS.
 export function createSwitchParams() {
   return {
-    frostLook: uniform(0), // 0..1, suit le switch eau
-    frostBlur: uniform(0.004), // rayon du flou (en UV)
+    frostLook: uniform(0),
+    frostBlur: uniform(0.004),
     fog: uniform(0.5),
     rim: uniform(0.7),
     frostColor: colorUniform("#dcefff"),
@@ -41,7 +39,6 @@ export function applySwitchFrost(
   params: SwitchParams,
 ) {
   const inside = insideOf(d);
-  // Buée : bruit lent, plus quelques gouttelettes de condensation.
   const fog = mx_fractal_noise_float(vec3(pixel.mul(0.015), time.mul(0.05)), 3, 2, 0.5, 1)
     .mul(0.5)
     .add(0.5);

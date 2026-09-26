@@ -19,15 +19,15 @@ import { createShardGeometry } from "./shards";
 import { centroid, createSeeds, voronoiCell, type P2 } from "./voronoi";
 
 const FOV = 50;
-const PLANE_HEIGHT = 1; // la page fait 1 unité de haut dans la scène
+const PLANE_HEIGHT = 1;
 
 type Shard = {
   mesh: Mesh;
-  distance: number; // distance à l'impact (décide de la chute)
-  crackOrder: number; // distance réduite au hasard (décide de la fissure)
-  tilt: Euler; // petite rotation prise quand l'éclat se fissure
+  distance: number;
+  crackOrder: number;
+  tilt: Euler;
   tiltProgress: number;
-  fallStart: number; // < 0 : encore en place
+  fallStart: number;
   origin: Vector3;
   originRotation: Euler;
   velocity: Vector3;
@@ -37,42 +37,30 @@ type Shard = {
 const random = (min: number, max: number) => min + Math.random() * (max - min);
 const ease = (t: number) => t * t * (3 - 2 * t);
 
-// Transition "vitre brisée", en plusieurs clics sur le bouton de la page :
-// clic 1..N : les fissures s'étendent depuis le bouton, des éclats proches tombent ;
-// dernier clic : tout explose et révèle la page suivante, rendue en fond.
-// La page est découpée en éclats de Voronoi (meshes 3D) texturés avec la page vivante.
 export class CrackTransition implements Transition {
-  // Un palier par clic, avant l'explosion finale.
-  // crack : portée des fissures (en hauteur d'écran, comparée à l'ordre de fissure) ;
-  // fall : proportion d'éclats qui tombent à ce clic, tirés au hasard sur toute la page.
   stages = [
     { crack: 1.4, fall: 0.1 },
     { crack: 3, fall: 0.2 },
   ];
 
   settings = {
-    radialSeeds: 55, // petits éclats autour du bouton
-    uniformSeeds: 110, // éclats sur toute la page
+    radialSeeds: 55,
+    uniformSeeds: 110,
     radialSpread: 0.5,
-    depth: 0.012, // épaisseur du verre
-    crackSpeed: 3.8, // vitesse de propagation des fissures
-    tiltDegrees: 2, // inclinaison des éclats fissurés (fait jouer la lumière)
-    // Parallaxe : la caméra se décale avec la souris (la page reste calée à l'écran), les
-    // reflets glissent sur les facettes et les éclats qui tombent bougent en profondeur.
-    parallax: 0.12, // décalage max de la caméra (hauteur d'écran)
-    parallaxFollow: 5, // réactivité (plus haut = plus direct)
-    // 0 : les fissures s'étendent en cercle depuis le bouton. Plus c'est haut, plus des éclats
-    // éloignés se fissurent tôt : fissures un peu partout, toujours plus denses vers l'impact.
+    depth: 0.012,
+    crackSpeed: 3.8,
+    tiltDegrees: 2,
+    parallax: 0.12,
+    parallaxFollow: 5,
     scatter: 0.75,
-    // Rayon autour du bouton où rien ne tombe avant l'explosion (il doit rester cliquable).
     buttonGuard: 0.12,
     fallSpeed: 0.35,
-    fallForward: 0.6, // vitesse vers la caméra : les éclats passent devant la page
+    fallForward: 0.6,
     gravity: 2.4,
     spin: 5,
     explodeSpeed: 0.9,
     explodeForward: 1.1,
-    explodeDuration: 2.2, // secondes avant de passer à la page suivante
+    explodeDuration: 2.2,
   };
 
   private glass = createGlassParams();
@@ -123,7 +111,6 @@ export class CrackTransition implements Transition {
     const halfHeight = PLANE_HEIGHT / 2;
     this.fitCamera();
 
-    // origin est en screenUV (y vers le bas) ; la scène a y vers le haut.
     this.impact = [
       (origin.x - 0.5) * PLANE_HEIGHT * aspect,
       (0.5 - origin.y) * PLANE_HEIGHT,
@@ -136,7 +123,6 @@ export class CrackTransition implements Transition {
       uniform: s.uniformSeeds,
       radialSpread: s.radialSpread,
     });
-    // Débord d'environ 1 px pour masquer les micro-fentes entre éclats voisins.
     const grow = PLANE_HEIGHT / window.innerHeight;
     const tilt = (s.tiltDegrees * Math.PI) / 180;
 
@@ -199,7 +185,6 @@ export class CrackTransition implements Transition {
 
     if (stage) {
       this.crackTarget = stage.crack;
-      // Des éclats au hasard, partout sauf autour du bouton.
       const candidates = this.shards.filter(
         (shard) =>
           shard.fallStart < 0 && shard.distance > this.settings.buttonGuard,
@@ -215,7 +200,6 @@ export class CrackTransition implements Transition {
       return;
     }
 
-    // Dernier clic : tout part.
     this.crackTarget = 100;
     this.explodeTime = this.time;
     for (const shard of this.shards) {
@@ -223,7 +207,6 @@ export class CrackTransition implements Transition {
     }
   }
 
-  // Détache un éclat : il part vers la caméra (passe devant la page) puis tombe.
   private drop(shard: Shard, explode: boolean) {
     const s = this.settings;
     const { mesh } = shard;
@@ -259,7 +242,6 @@ export class CrackTransition implements Transition {
     this.time += delta;
     const s = this.settings;
 
-    // Parallaxe : la caméra suit la souris avec un léger amorti (y de l'écran vers le bas).
     const pointer = this.pointer.uv.value;
     this.cameraTarget.set(
       (pointer.x - 0.5) * s.parallax,
@@ -270,7 +252,6 @@ export class CrackTransition implements Transition {
       1 - Math.exp(-delta * s.parallaxFollow),
     );
 
-    // Les fissures se propagent depuis l'impact jusqu'au rayon du palier.
     const radius = this.glass.crackRadius.value;
     this.glass.crackRadius.value = Math.min(
       radius + delta * s.crackSpeed,
@@ -281,7 +262,6 @@ export class CrackTransition implements Transition {
       const { mesh } = shard;
 
       if (shard.fallStart < 0) {
-        // Fissuré : l'éclat s'incline légèrement, la lumière joue sur les facettes.
         if (
           shard.crackOrder < this.glass.crackRadius.value &&
           shard.tiltProgress < 1
@@ -321,7 +301,6 @@ export class CrackTransition implements Transition {
 
   render(renderer: WebGPURenderer) {
     this.fitCamera();
-    // Fond : la page suivante, visible là où des éclats sont partis.
     this.background.render(renderer);
     const autoClear = renderer.autoClear;
     renderer.autoClear = false;
@@ -330,10 +309,6 @@ export class CrackTransition implements Transition {
     renderer.autoClear = autoClear;
   }
 
-  // Caméra placée pour que le plan z = 0 remplisse exactement l'écran.
-  // Projection "fenêtre" : la caméra peut se décaler (parallaxe), mais le cadre de vue est
-  // recentré sur la page avec setViewOffset, donc le plan z = 0 reste calé au pixel près.
-  // Seul ce qui n'est pas dans ce plan (inclinaison, éclats qui tombent, reflets) bouge.
   private fitCamera() {
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -344,7 +319,6 @@ export class CrackTransition implements Transition {
       y,
       PLANE_HEIGHT / 2 / Math.tan((FOV * Math.PI) / 360),
     );
-    // 1 unité monde = `height` pixels dans le plan de la page.
     const pixels = height / PLANE_HEIGHT;
     this.camera.setViewOffset(width, height, -x * pixels, y * pixels, width, height);
   }

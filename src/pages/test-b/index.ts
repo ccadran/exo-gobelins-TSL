@@ -5,7 +5,6 @@ import { Page } from "../Page";
 import template from "./template.html?raw";
 import style from "./style.css?inline";
 
-// Page de test B : pixelisation qui augmente quand le curseur va vers la droite.
 export class TestBPage extends Page {
   readonly id = "test-b";
   protected readonly template = template;
@@ -17,7 +16,6 @@ export class TestBPage extends Page {
   protected setup(ctx: AppContext) {
     const maxPixelSize = uniform(48);
 
-    // Taille d'un "gros pixel" en pixels écran : 1 à gauche, maxPixelSize à droite.
     const pixelSize = mix(1, maxPixelSize, ctx.pointer.uv.x);
     const cells = screenSize.div(pixelSize);
     const pixelatedUV = floor(screenUV.mul(cells)).add(0.5).div(cells);

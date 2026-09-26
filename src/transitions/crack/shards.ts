@@ -2,22 +2,15 @@ import { BufferGeometry, Float32BufferAttribute } from "three/webgpu";
 import type { P2 } from "./voronoi";
 
 export type ShardGeometryOptions = {
-  poly: P2[]; // cellule, sens trigonométrique, repère monde
-  center: P2; // centre de l'éclat (les sommets sont exprimés par rapport à lui)
+  poly: P2[];
+  center: P2;
   halfWidth: number;
   halfHeight: number;
-  depth: number; // épaisseur du verre
-  grow: number; // léger débord pour que les éclats voisins se chevauchent (pas de fente)
-  crackOrder: number; // plus c'est petit, plus l'éclat se fissure tôt
+  depth: number;
+  grow: number;
+  crackOrder: number;
 };
 
-// Éclat extrudé : face avant (z+), face arrière (z-) et tranches.
-// Attributs :
-// - uv : position d'origine du sommet dans la page (repère screenUV, origine en haut à gauche),
-//   pour que l'éclat affiche exactement le morceau de page qu'il recouvrait ;
-// - edge : 1 au centre, 0 sur le bord (faces avant/arrière en éventail depuis le centre).
-//   Sert à dessiner la ligne de fissure à épaisseur constante (via fwidth) ;
-// - crackOrder : ordre de fissure de l'éclat, identique sur tout l'éclat.
 export function createShardGeometry(options: ShardGeometryOptions) {
   const { poly, center, halfWidth, halfHeight, depth, grow, crackOrder } = options;
   const [cx, cy] = center;
@@ -47,17 +40,14 @@ export function createShardGeometry(options: ShardGeometryOptions) {
     const [ax, ay] = expanded[i];
     const [bx, by] = expanded[(i + 1) % count];
 
-    // Face avant : triangle (centre, a, b), sens trigo vu de +z.
     push(cx, cy, half, [0, 0, 1], 1);
     push(ax, ay, half, [0, 0, 1], 0);
     push(bx, by, half, [0, 0, 1], 0);
 
-    // Face arrière : même triangle, sens inversé.
     push(cx, cy, -half, [0, 0, -1], 1);
     push(bx, by, -half, [0, 0, -1], 0);
     push(ax, ay, -half, [0, 0, -1], 0);
 
-    // Tranche : normale sortante, perpendiculaire à l'arête a -> b.
     const length = Math.hypot(bx - ax, by - ay) || 1;
     const n: [number, number, number] = [(by - ay) / length, -(bx - ax) / length, 0];
     push(ax, ay, half, n, 0);

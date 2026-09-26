@@ -30,23 +30,20 @@ export const MAX_RIPPLES = 12;
 
 export function createRainParams() {
   return {
-    amount: uniform(0), // 0..1, intensité de la pluie (switch)
-    wetness: uniform(0), // 0..1, la page se mouille progressivement
-    // Traits de pluie
-    angle: uniform(1.6), // 0 = horizontale, en radians
-    density: uniform(55), // nombre de rangées sur la hauteur
+    amount: uniform(0),
+    wetness: uniform(0),
+    angle: uniform(1.6),
+    density: uniform(55),
     speed: uniform(6),
-    streakLength: uniform(0.35), // longueur d'un trait (fraction de son cycle)
+    streakLength: uniform(0.35),
     streakOpacity: uniform(0.25),
-    // Ripples (impacts sur la page)
     rippleSpeed: uniform(0.22),
     rippleWidth: uniform(0.012),
     rippleStrength: uniform(0.035),
     rippleLife: uniform(1.4),
-    // Page mouillée
-    dropScale: uniform(16), // gouttes statiques par unité de hauteur
-    dropLens: uniform(0.7), // force de la réfraction des gouttes
-    trickleColumns: uniform(16), // colonnes de gouttes qui coulent
+    dropScale: uniform(16),
+    dropLens: uniform(0.7),
+    trickleColumns: uniform(16),
     trickleSpeed: uniform(0.07),
     wetTint: colorUniform("#8fa9bd"),
   };
@@ -54,7 +51,6 @@ export function createRainParams() {
 
 export type RainParams = ReturnType<typeof createRainParams>;
 
-// Impacts : (x, y) en screenUV, z = instant de l'impact, w = force. z très négatif = libre.
 export function createImpacts() {
   return uniformArray(
     Array.from({ length: MAX_RIPPLES }, () => new Vector4(0, 0, -1000, 0)),
@@ -64,8 +60,6 @@ export function createImpacts() {
 
 export type Impacts = ReturnType<typeof createImpacts>;
 
-// Traits de pluie devant la page, qui avancent dans la direction `angle`.
-// Deux couches (proche / lointaine) pour la profondeur.
 export function rainStreaks(
   uv: Vec2,
   aspect: Float,
@@ -87,7 +81,6 @@ export function rainStreaks(
       )
       .add(random2.mul(10));
     const segment = fract(along);
-    // Queue qui s'estompe (segment 0 -> length), tête nette à l'avant.
     const streak = smoothstep(0, params.streakLength, segment).mul(
       oneMinus(
         smoothstep(params.streakLength, params.streakLength.add(0.01), segment),
@@ -103,8 +96,6 @@ export function rainStreaks(
     .mul(params.amount);
 }
 
-// Somme des ondes circulaires de tous les impacts actifs.
-// offset : déplacement d'UV (réfraction), light : reflet sur les crêtes.
 export function ripples(
   uv: Vec2,
   aspect: Float,
@@ -116,7 +107,6 @@ export function ripples(
   let offset: Vec2 = vec2(0, 0);
   let light: Float = float(0);
 
-  // Boucle déroulée côté JS : MAX_RIPPLES copies dans le shader.
   for (let i = 0; i < MAX_RIPPLES; i++) {
     const impact = impacts.element(i);
     const age = time.sub(impact.z);
@@ -135,15 +125,12 @@ export function ripples(
   return { offset: offset.mul(params.rippleStrength).div(toAspect), light };
 }
 
-// Page mouillée : gouttes statiques (apparaissent avec la wetness) + gouttes qui coulent
-// vers le bas en laissant une traînée. Chaque goutte agit comme une petite lentille.
 export function wetGlass(
   uv: Vec2,
   aspect: Float,
   time: Float,
   params: RainParams,
 ) {
-  // Gouttes statiques : une par cellule de grille, position/taille aléatoires.
   const st = vec2(uv.x.mul(aspect), uv.y).mul(params.dropScale);
   const cell = floor(st);
   const local = fract(st).sub(0.5).sub(hash22(cell).sub(0.5).mul(0.6));
@@ -154,7 +141,6 @@ export function wetGlass(
   );
   const staticOffset = local.mul(drop).div(params.dropScale);
 
-  // Gouttes qui coulent : une par colonne active, repère isotrope en "unités de colonne".
   const tc = vec2(uv.x.mul(aspect), uv.y).mul(params.trickleColumns);
   const column = floor(tc.x);
   const random = hash21(vec2(column, 2.3));
@@ -178,7 +164,6 @@ export function wetGlass(
   const head = oneMinus(
     smoothstep(headSize.mul(0.7), headSize, length(vec2(dx, dy.mul(0.75)))),
   ).mul(active);
-  // Traînée au-dessus de la tête (dy < 0), qui s'estompe sur ~3 colonnes.
   const trailFade = smoothstep(-3, 0, dy).mul(step(dy, 0)).mul(active);
   const trail = oneMinus(smoothstep(0.03, 0.06, abs(dx))).mul(trailFade);
   const trailCell = fract(tc.y.mul(2.5)).sub(0.5).div(2.5);

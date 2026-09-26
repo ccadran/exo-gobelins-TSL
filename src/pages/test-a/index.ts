@@ -5,7 +5,6 @@ import { Page } from "../Page";
 import template from "./template.html?raw";
 import style from "./style.css?inline";
 
-// Page de test A : aberration chromatique, plus forte près du curseur.
 export class TestAPage extends Page {
   readonly id = "test-a";
   protected readonly template = template;

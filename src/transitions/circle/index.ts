@@ -5,7 +5,6 @@ import type { Transition, TransitionStart } from "../Transition";
 
 const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
-// Transition de test : un cercle part de `origin` et s'élargit en révélant la page suivante.
 export class CircleTransition implements Transition {
   readonly steps = 1;
   duration = 1.2;
@@ -14,8 +13,6 @@ export class CircleTransition implements Transition {
   private origin = uniform(new Vector2(0.5, 0.5));
   private maxRadius = uniform(1);
   private softness = uniform(0.01);
-  // Nœuds gardés tels quels dans le graphe : on change leur `.value` à chaque start().
-  // (Ne pas utiliser `.sample()` ici : il clone le nœud et figerait la texture.)
   private fromNode = texture(new Texture(), screenUV);
   private toNode = texture(new Texture(), screenUV);
   private material = new MeshBasicNodeMaterial();
@@ -26,7 +23,6 @@ export class CircleTransition implements Transition {
   constructor(debug: FolderApi) {
     const aspect = vec2(screenSize.x.div(screenSize.y), 1);
     const distance = screenUV.sub(this.origin).mul(aspect).length();
-    // Le rayon va de 0 à la distance du coin le plus éloigné (+ la douceur du bord).
     const radius = this.progress.mul(this.maxRadius.add(this.softness));
     const outside = smoothstep(radius.sub(this.softness), radius, distance);
 

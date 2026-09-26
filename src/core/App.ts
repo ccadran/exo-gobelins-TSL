@@ -14,9 +14,6 @@ export type AppContext = {
   createHtmlTexture(element: HTMLElement): HtmlTexture;
 };
 
-// La boucle est pilotée par l'événement `paint` du canvas (et pas par requestAnimationFrame) :
-// c'est le seul moment où le snapshot du DOM est à jour. On copie le DOM dans les textures,
-// on rend la frame, puis requestPaint() redemande un `paint` pour la frame suivante.
 export class App {
   private canvas: HTMLCanvasElement;
   private pageFactories: Record<string, PageFactory>;
@@ -34,14 +31,11 @@ export class App {
     copies: 0,
     lastError: "",
   };
-  // Performance : limite d'images/s (un écran 120 Hz dessinerait sinon 2× plus) et
-  // résolution de rendu (pixel ratio ; 2 = Retina net, plus bas = moins de pixels à calculer).
   private settings = {
     maxFps: 120,
     pixelRatio: Math.min(window.devicePixelRatio, 2),
   };
 
-  // pageFactories : { nom: () => new Page() }, dans l'ordre du parcours.
   constructor(
     canvas: HTMLCanvasElement,
     pageFactories: Record<string, PageFactory>,
@@ -49,6 +43,11 @@ export class App {
     this.canvas = canvas;
     this.pageFactories = pageFactories;
     this.renderer = new WebGPURenderer({ canvas, antialias: false });
+    const updateDebugVisibility = () => {
+      this.pane.hidden = location.hash !== "#debug";
+    };
+    updateDebugVisibility();
+    window.addEventListener("hashchange", updateDebugVisibility);
     this.init();
   }
 
@@ -102,7 +101,6 @@ export class App {
       transition,
     );
 
-    // Debug : aller directement à une page, sans passer par la transition.
     const navigation = this.pane.addFolder({ title: "pages" });
     Object.keys(this.pageFactories).forEach((name, index) => {
       navigation
@@ -125,8 +123,6 @@ export class App {
   private frame(event: CanvasPaintEvent) {
     this.stats.paints++;
 
-    // Toujours copier le DOM qui a changé, même si on saute le rendu de cette frame :
-    // sinon ce changement serait perdu (il n'est signalé qu'une fois).
     const changed = event.changedElements ?? [];
     this.stats.copies = 0;
     this.stats.lastError = "";
@@ -136,8 +132,6 @@ export class App {
       this.stats.lastError ||= html.lastError;
     }
 
-    // Limite d'images/s : on saute le rendu si la frame précédente est trop récente
-    // (petite marge pour les variations de timing du navigateur).
     const now = performance.now();
     if (now - this.lastTime < 1000 / this.settings.maxFps - 2) {
       this.canvas.requestPaint!();
